@@ -75,7 +75,8 @@ export function AppShell({
         { label: "Review Queue", href: "/review-queue", icon: ClipboardCheck },
         { label: "Active Handovers", href: "/handovers", icon: ArrowLeftRight },
         { label: "Incidents", href: "/incidents", icon: AlertTriangle },
-        { label: "Credential Verification", href: "/verification", icon: Award }
+        { label: "Credential Verification", href: "/verification", icon: Award },
+        { label: "Audit Log", href: "/audit", icon: ScrollText }
       );
     } else if (role === "admin") {
       items.push(
@@ -84,8 +85,8 @@ export function AppShell({
         { label: "Active Handovers", href: "/handovers", icon: ArrowLeftRight },
         { label: "Incidents", href: "/incidents", icon: AlertTriangle },
         { label: "Credential Verification", href: "/verification", icon: Award },
-        { label: "Audit Log", href: "/audit-log", icon: ScrollText },
-        { label: "Fairness Settings", href: "/fairness-settings", icon: Scale },
+        { label: "Audit Log", href: "/admin/audit", icon: ScrollText },
+        { label: "Fairness Settings", href: "/admin/settings", icon: Scale },
         { label: "Users", href: "/admin/users", icon: Users },
         { label: "My Bookings", href: "/bookings", icon: CalendarClock },
         { label: "My Profile & Credentials", href: "/profile", icon: UserCheck }
@@ -256,6 +257,11 @@ export function AppShell({
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
           {children}
         </main>
+
+        {/* Demo Environment Disclaimer Footer */}
+        <footer className="py-4 px-6 border-t border-slate-900/90 text-center text-xs text-slate-500 bg-slate-950/60">
+          <span className="font-medium text-slate-400">Demo environment: fictional data</span> • <span>LabLoop Academic Equipment Governance</span>
+        </footer>
       </div>
     </div>
   );

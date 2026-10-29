@@ -1,3 +1,4 @@
+
 import { requireUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthenticatedLayout } from "@/components/shell/authenticated-layout";
