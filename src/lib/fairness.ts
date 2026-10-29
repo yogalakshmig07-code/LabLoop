@@ -53,14 +53,11 @@ export function computePriorityScore(
     reasons.push(`-${usagePenalty} penalty for ${hoursUsedRecently}h recent equipment usage`);
   }
 
-  const ok = strikes < 3;
-  const reasonText = ok
-    ? `Eligible priority score: ${finalScore}. [${reasons.join(", ")}]`
-    : `Ineligible: User has reached ${strikes} strikes (threshold is 3).`;
+  const reasonText = `Priority score: ${finalScore}. [${reasons.join(", ")}] (Strikes lower waitlist priority rank but never block bookings automatically).`;
 
   return {
     score: finalScore,
-    ok,
+    ok: true,
     reason: reasonText,
   };
 }

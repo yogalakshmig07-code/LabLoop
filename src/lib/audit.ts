@@ -16,6 +16,8 @@ export interface LogAuditParams {
   details?: Record<string, unknown> | Json;
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Inserts an immutable event record into the append-only audit_log table.
  * Uses the service-role admin client to bypass user RLS restrictions.
@@ -24,8 +26,11 @@ export async function logAudit(params: LogAuditParams): Promise<void> {
   try {
     const admin = createAdminClient();
 
+    const rawActorId = params.actor?.id;
+    const actorId = rawActorId && UUID_REGEX.test(rawActorId) ? rawActorId : null;
+
     const { error } = await admin.from("audit_log").insert({
-      actor_id: params.actor?.id || null,
+      actor_id: actorId,
       actor_name: params.actor?.name || null,
       action: params.action,
       entity_type: params.entityType,

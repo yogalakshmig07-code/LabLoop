@@ -2,6 +2,8 @@ import { requireRole } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthenticatedLayout } from "@/components/shell/authenticated-layout";
 import { ReviewQueuePanel, BookingCardData } from "@/components/review/review-queue-panel";
+import { getFairnessSettings } from "@/lib/bookings";
+import { detectSuspiciousUsagePatterns } from "@/lib/incidents";
 import { ClipboardCheck } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -82,6 +84,23 @@ export default async function ReviewQueuePage() {
 
   const rawList: any[] = allBookings || [];
 
+  const fairnessSettings = await getFairnessSettings();
+  const strikeThreshold = fairnessSettings?.strike_threshold || 3;
+
+  // Precompute suspicious usage patterns for users in the review queue
+  const patternMap = new Map<string, string[]>();
+  for (const b of rawList) {
+    const userId = b.user?.id;
+    const resId = b.resource?.id;
+    if (userId) {
+      const key = `${userId}_${resId || ""}`;
+      if (!patternMap.has(key)) {
+        const result = await detectSuspiciousUsagePatterns(userId, resId);
+        patternMap.set(key, result.chips);
+      }
+    }
+  }
+
   const mapToCardData = (b: any): BookingCardData => ({
     id: b.id,
     status: b.status,
@@ -108,6 +127,8 @@ export default async function ReviewQueuePage() {
       strikes: b.user?.strikes || 0,
     },
     ext_requested_end_at: b.ext_requested_end_at,
+    suspicious_patterns: patternMap.get(`${b.user?.id}_${b.resource?.id || ""}`) || [],
+    strike_threshold: strikeThreshold,
   });
 
   const pendingBookings: BookingCardData[] = rawList

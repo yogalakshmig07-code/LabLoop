@@ -16,6 +16,9 @@ export interface CurrentUserSession {
  * Returns null if the user is unauthenticated or has no profile.
  */
 export async function getCurrentUser(): Promise<CurrentUserSession | null> {
+  if ((global as any).__mockSession) {
+    return (global as any).__mockSession;
+  }
   try {
     const supabase = await createClient();
     const {

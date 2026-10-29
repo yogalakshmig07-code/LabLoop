@@ -19,12 +19,18 @@ import {
   Building,
   HelpCircle,
   ArrowRight,
+  ShieldAlert,
 } from "lucide-react";
 import { format, formatDistanceStrict } from "date-fns";
 import { generateDecisionExplanation } from "@/lib/bookings";
 import { CancelBookingButton } from "@/components/bookings/cancel-booking-button";
 import { ExtensionRequestForm } from "@/components/bookings/extension-request-form";
-import { BookingStatus, PriorityTier } from "@/types/db";
+import {
+  BookingTimeline,
+  TimelineAuditEntry,
+  TimelineConditionReport,
+} from "@/components/bookings/booking-timeline";
+import { BookingStatus, PriorityTier, ConditionGrade } from "@/types/db";
 
 export const dynamic = "force-dynamic";
 
@@ -69,13 +75,73 @@ export default async function BookingDetailPage({
     notFound();
   }
 
-  // Authorization check
-  const isOwner = booking.user_id === session.user.id;
-  const isStaff = ["owner", "manager", "admin"].includes(session.role);
+  // Authorization check: Both the user and the resource's owner/managers (and admin) can see it, nobody else.
+  const isRequester = booking.user_id === session.user.id;
+  const isAdmin = session.role === "admin";
+  const isResourceOwner = booking.resource?.owner_id === session.user.id;
 
-  if (!isOwner && !isStaff) {
+  let isResourceManager = false;
+  if (!isRequester && !isAdmin && !isResourceOwner) {
+    const { data: mgr } = await admin
+      .from("resource_managers")
+      .select("resource_id")
+      .eq("resource_id", booking.resource_id)
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+    isResourceManager = Boolean(mgr);
+  }
+
+  if (!isRequester && !isAdmin && !isResourceOwner && !isResourceManager) {
     notFound();
   }
+
+  const isStaff = isAdmin || isResourceOwner || isResourceManager;
+
+  // Fetch audit log entries for timeline
+  const { data: auditEntries } = (await admin
+    .from("audit_log")
+    .select("id, action, actor_id, actor_name, entity_type, reason, details, created_at")
+    .or(`booking_id.eq.${id},entity_id.eq.${id}`)
+    .order("created_at", { ascending: true })) as { data: TimelineAuditEntry[] | null; error: any };
+
+  // Fetch condition reports (check-out and return)
+  const { data: conditionReports } = (await admin
+    .from("condition_reports")
+    .select("*")
+    .eq("booking_id", id)
+    .order("created_at", { ascending: true })) as { data: any[] | null; error: any };
+
+  // Pre-sign all condition photos
+  const allPhotoPaths: string[] = [];
+  conditionReports?.forEach((cr) => {
+    if (Array.isArray(cr.photo_paths)) {
+      allPhotoPaths.push(...cr.photo_paths);
+    }
+  });
+
+  const photoUrlMap: Record<string, string> = {};
+  for (const path of allPhotoPaths) {
+    if (!path) continue;
+    const { data: signed } = await admin.storage
+      .from("condition-photos")
+      .createSignedUrl(path, 3600);
+    if (signed?.signedUrl) {
+      photoUrlMap[path] = signed.signedUrl;
+    }
+  }
+
+  const timelineReports: TimelineConditionReport[] = (conditionReports || []).map((cr) => ({
+    id: cr.id,
+    booking_id: cr.booking_id,
+    kind: cr.kind as "checkout" | "return",
+    grade: cr.grade as ConditionGrade,
+    notes: cr.notes,
+    checklist: (cr.checklist as Record<string, boolean>) || {},
+    photo_paths: cr.photo_paths || [],
+    photoUrls: photoUrlMap,
+    recorded_by: cr.recorded_by,
+    created_at: cr.created_at,
+  }));
 
   const start = new Date(booking.start_at);
   const end = new Date(booking.end_at);
@@ -141,7 +207,7 @@ export default async function BookingDetailPage({
 
   return (
     <AuthenticatedLayout>
-      <div className="space-y-6 max-w-4xl mx-auto">
+      <div className="space-y-6 max-w-4xl mx-auto pb-12">
         <div>
           <Link
             href="/bookings"
@@ -171,7 +237,28 @@ export default async function BookingDetailPage({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {/* Staff Handover Fast Actions */}
+            {isStaff && booking.status === "approved" && (
+              <Link
+                href={`/bookings/${booking.id}/checkout`}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>Start Check-Out</span>
+              </Link>
+            )}
+
+            {isStaff && booking.status === "checked_out" && (
+              <Link
+                href={`/bookings/${booking.id}/return`}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Process Return</span>
+              </Link>
+            )}
+
             {/* Cancel action */}
             {["pending_review", "waitlisted", "approved"].includes(booking.status) && (
               <CancelBookingButton
@@ -188,6 +275,15 @@ export default async function BookingDetailPage({
                 currentEndAt={booking.end_at}
               />
             )}
+
+            {/* Report Incident Action */}
+            <Link
+              href={`/bookings/${booking.id}/incident`}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30 text-xs font-semibold shadow-sm transition-colors"
+            >
+              <ShieldAlert className="w-4 h-4 text-rose-400" />
+              <span>Report Incident</span>
+            </Link>
           </div>
         </div>
 
@@ -309,8 +405,15 @@ export default async function BookingDetailPage({
             </Link>
           </div>
         </div>
+
+        {/* Vertical Audit Trail & Life Cycle Timeline */}
+        <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm space-y-6">
+          <BookingTimeline
+            entries={auditEntries || []}
+            conditionReports={timelineReports}
+          />
+        </div>
       </div>
     </AuthenticatedLayout>
   );
 }
-

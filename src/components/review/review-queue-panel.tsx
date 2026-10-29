@@ -54,6 +54,8 @@ export interface BookingCardData {
   };
   weekly_hours_used?: number;
   ext_requested_end_at?: string | null;
+  suspicious_patterns?: string[];
+  strike_threshold?: number;
 }
 
 interface ReviewQueuePanelProps {
@@ -359,11 +361,15 @@ function BookingCard({
             <span className="text-sm font-semibold text-white truncate">
               {booking.user.full_name || booking.user.email || "Unknown User"}
             </span>
-            {booking.user.strikes > 0 && (
+            {booking.user.strikes >= (booking.strike_threshold || 3) ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-600/30 text-rose-200 border border-rose-500 animate-pulse">
+                ⚠ High strike count ({booking.user.strikes})
+              </span>
+            ) : booking.user.strikes > 0 ? (
               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
                 ⚠ {booking.user.strikes} strike{booking.user.strikes !== 1 ? "s" : ""}
               </span>
-            )}
+            ) : null}
             {showRank && booking.waitlist_rank && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-600/20 border border-indigo-500/30 text-indigo-300">
                 <Star className="w-3 h-3" />#{booking.waitlist_rank}
@@ -422,6 +428,24 @@ function BookingCard({
 
       {/* System check */}
       <SystemCheckPanel check={booking.system_check} />
+
+      {/* Suspicious usage pattern chips */}
+      {booking.suspicious_patterns && booking.suspicious_patterns.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-xl bg-slate-950 border border-slate-800">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+            <AlertTriangle className="w-3 h-3 text-amber-400" />
+            Advisory Flags:
+          </span>
+          {booking.suspicious_patterns.map((chip, idx) => (
+            <span
+              key={idx}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20"
+            >
+              <span>{chip}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Waitlist score breakdown */}
       {showRank && scoreBreakdown && (
